@@ -1,0 +1,130 @@
+---
+objects from file:
+  - court_emails : court_emails_no_district.yml
+---
+imports:
+  - time
+---
+objects:
+  - result_store: DAStore.using(base='interview', encrypted=False)
+---
+mandatory: True
+code: |
+  multi_user = True
+  #result_store.delete('email_receipt_status')
+---
+mandatory: True
+question: |
+  List the emails
+subquestion: |
+  The email button has been clicked **${email_sent_counter}** times. Note: 
+  this number only updates once the page has reloaded.
+  
+  % if False:
+  ${action_button_html(url_action('run_task'),label="Send emails (happens immediately)",icon="envelope")}
+  
+  % endif
+  
+  Email | Time(s) | Spam |   Notes
+  ------|---------|------|---------
+  % for index in email_receipt_status:
+  ${index} |  ${ comma_and_list([item.get('date') for item in email_receipt_status[index]])} |  ${ comma_list([yesno(item.get('went_to_spam') ) for item in email_receipt_status[index]])} | ${ comma_list([item.get('note') for item in email_receipt_status[index]])}
+  % endfor
+help: |    
+  % for email in court_emails:
+  * ${email} [${court_emails[email]}](${url_action('received_email_confirmation', email=court_emails[email])})
+  % endfor
+---
+event: received_email_confirmation
+code: |
+  undefine('update_store')
+  undefine('went_to_spam')
+  undefine('recognized_source')
+  undefine('notes')
+  email_from_action = action_argument('email')
+  force_ask('show_saved_status')
+---
+reconsider: True
+code: |
+  email_receipt_status = result_store.get('email_receipt_status') or {}
+  
+  get_more_details
+  receipt_list = email_receipt_status.get(email_from_action,[])
+  receipt_list.append({
+    'date': format_datetime(current_datetime()),
+  #  'recognized_source': recognized_source,
+    'went_to_spam': went_to_spam,
+    'notes': notes,
+  })
+  
+  email_receipt_status[email_from_action] = receipt_list
+  result_store.set('email_receipt_status', email_receipt_status) 
+  update_store = True  
+---
+need: update_store
+event: show_saved_status
+question: |
+  Thank you
+subquestion: |
+  We recorded your response
+---
+continue button field: get_more_details
+question: |
+  Thank you! Please answer the questions below and click "Continue" to record
+  your response.
+subquestion: |
+  Thanks, by clicking "continue" below, you will confirm that you received an email to this address:
+  ${action_argument('email')}
+  
+  Please take a second to let us know a few more details.
+fields:
+  - This email went to my spam folder: went_to_spam
+    datatype: yesno
+  - Additional notes: notes
+    datatype: area
+    required: False
+---
+template: court_email_template
+subject: Test email from MassAccessProject/Suffolk LIT Lab
+content: |
+  Dear Clerk for ${court_name},
+  
+  This is a test message to confirm you are able to receive court filings
+  from the Suffolk University Law School MassAccess Project. The court
+  is working with Suffolk Legal Innovation and Technology Lab on this project as an emergency response
+  to COVID-19. We sent the email to this address: ${court_email}.
+    
+  Please click [this link](${interview_url_action('received_email_confirmation', email=court_email)}) 
+  and answer a short questionnaire to let us know you got the email.
+  
+  Important: please click "continue" after visiting this link so we
+  can record your response.
+  
+  If you have any questions about our project, please email massaccess@suffolk.edu.
+  
+  Sincerely,
+  
+  David Colarusso  
+  Quinten Steenhuis  
+  Suffolk University Law School LIT Lab
+---
+need: 
+  - court_emails
+  - court_email_template
+  - email_sent_counter
+event: send_court_emails_background
+code: |
+  test = True 
+---
+event: run_task
+code: |
+  task_results = background_action('send_court_emails_background')
+---
+reconsider: True
+code: |
+  email_receipt_status = result_store.get('email_receipt_status') or {}
+---
+reconsider: True
+code: |
+  email_sent_counter = result_store.get('emails_sent_counter') or 0
+  
